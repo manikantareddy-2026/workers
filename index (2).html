@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WorkBoard — Find Local Workers</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+<!-- Supabase JS client -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<style>
+  :root{
+    --paper:#F6F5F0;
+    --ink:#1C2028;
+    --ink-soft:#565B66;
+    --line:#DAD6CB;
+    --card:#FFFFFF;
+    --amber:#F5A623;
+    --amber-ink:#3D2A00;
+    --blue:#2F6FED;
+    --green:#1E8E5A;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.brand,.ticket-num{
+    font-family:'Space Grotesk',sans-serif;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  a{color:inherit;text-decoration:none;}
+  button{font-family:inherit;cursor:pointer;}
+
+  /* ---------- Top bar ---------- */
+  header{
+    position:sticky;top:0;z-index:20;
+    background:var(--ink);
+    color:var(--paper);
+    padding:14px 20px;
+    display:flex;align-items:center;justify-content:space-between;
+    box-shadow:0 2px 0 var(--amber);
+  }
+  .brand{font-size:20px;font-weight:700;display:flex;align-items:center;gap:8px;letter-spacing:-0.02em;}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--amber);display:inline-block;}
+  nav{display:flex;gap:8px;}
+  nav button{
+    background:transparent;
+    border:1px solid rgba(246,245,240,0.25);
+    color:var(--paper);
+    padding:9px 14px;
+    border-radius:999px;
+    font-size:13px;font-weight:600;
+    transition:.15s;
+  }
+  nav button.active, nav button:hover{background:var(--amber);color:var(--amber-ink);border-color:var(--amber);}
+
+  main{max-width:1080px;margin:0 auto;padding:28px 20px 80px;}
+
+  /* ---------- Hero ---------- */
+  .hero{padding:20px 0 30px;}
+  .hero .eyebrow{
+    font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--ink-soft);
+    display:flex;align-items:center;gap:8px;
+  }
+  .hero .eyebrow::before{content:"";width:22px;height:2px;background:var(--amber);display:inline-block;}
+  .hero h1{font-size:clamp(28px,4vw,42px);line-height:1.05;margin:10px 0 8px;max-width:640px;}
+  .hero p{color:var(--ink-soft);max-width:520px;font-size:15px;line-height:1.5;margin:0 0 18px;}
+
+  .search{
+    display:flex;gap:0;max-width:420px;
+    border:1.5px solid var(--line);border-radius:999px;overflow:hidden;
+    background:var(--card);
+  }
+  .search input{
+    flex:1;border:none;outline:none;padding:12px 16px;font-size:14px;background:transparent;
+  }
+  .search span{padding:12px 14px;color:var(--ink-soft);}
+
+  /* ---------- Category board ---------- */
+  .board-head{display:flex;align-items:baseline;justify-content:space-between;margin:34px 0 14px;}
+  .board-head h2{font-size:18px;margin:0;}
+  .board-head span{font-size:12px;color:var(--ink-soft);font-family:'JetBrains Mono',monospace;}
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+    gap:12px;
+  }
+  .ticket{
+    position:relative;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:16px 14px 14px;
+    text-align:left;
+    transition:.15s transform, .15s border-color, .15s box-shadow;
+  }
+  .ticket:hover{transform:translateY(-2px);border-color:var(--ink);box-shadow:0 6px 0 var(--amber);}
+  .ticket .hole{
+    position:absolute;top:12px;right:12px;
+    width:9px;height:9px;border-radius:50%;
+    background:var(--paper);border:1.5px solid var(--line);
+  }
+  .ticket .ticket-num{font-size:11px;color:var(--ink-soft);}
+  .ticket .icon{font-size:26px;margin:10px 0 8px;display:block;}
+  .ticket .label{font-weight:600;font-size:14.5px;line-height:1.25;display:block;}
+
+  /* ---------- List view ---------- */
+  .backbtn{
+    display:inline-flex;align-items:center;gap:6px;
+    background:none;border:none;color:var(--ink-soft);font-size:13px;font-weight:600;
+    padding:0;margin-bottom:16px;
+  }
+  .backbtn:hover{color:var(--ink);}
+  .list-title{display:flex;align-items:center;gap:12px;margin-bottom:4px;}
+  .list-title .icon{font-size:30px;}
+  .list-title h2{font-size:26px;margin:0;}
+  .list-sub{color:var(--ink-soft);font-size:14px;margin:0 0 22px;}
+
+  .worker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;}
+  .worker-card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;display:flex;flex-direction:column;gap:10px;
+  }
+  .worker-top{display:flex;gap:12px;align-items:center;}
+  .avatar{
+    width:56px;height:56px;border-radius:50%;object-fit:cover;
+    background:var(--paper);border:1px solid var(--line);flex-shrink:0;
+  }
+  .avatar-fallback{
+    width:56px;height:56px;border-radius:50%;flex-shrink:0;
+    background:var(--ink);color:var(--paper);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;
+  }
+  .worker-name{font-weight:600;font-size:15.5px;}
+  .worker-cat{font-size:12px;color:var(--ink-soft);}
+  .worker-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--ink-soft);border-top:1px dashed var(--line);padding-top:10px;}
+  .cost-tag{font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--ink);}
+  .call-btn{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--ink);color:var(--paper);border:none;border-radius:999px;
+    padding:11px;font-weight:600;font-size:13.5px;
+  }
+  .call-btn:hover{background:var(--blue);}
+
+  .empty{
+    padding:50px 20px;text-align:center;color:var(--ink-soft);
+    border:1.5px dashed var(--line);border-radius:var(--radius);
+  }
+  .empty b{color:var(--ink);}
+
+  /* ---------- Signup form ---------- */
+  .form-wrap{max-width:520px;margin:0 auto;}
+  .form-wrap .eyebrow{font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);}
+  .form-wrap h2{font-size:26px;margin:8px 0 4px;}
+  .form-wrap p.lead{color:var(--ink-soft);font-size:14px;margin:0 0 24px;}
+
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;}
+  .field input[type=text],
+  .field input[type=tel],
+  .field select{
+    width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;
+    font-size:14.5px;background:var(--card);outline:none;
+  }
+  .field input:focus,.field select:focus{border-color:var(--ink);}
+
+  .photo-picker{
+    display:flex;align-items:center;gap:14px;
+    border:1.5px dashed var(--line);border-radius:12px;padding:12px;
+  }
+  .photo-preview{
+    width:64px;height:64px;border-radius:50%;object-fit:cover;background:var(--paper);border:1px solid var(--line);flex-shrink:0;
+  }
+  .photo-picker-btn{
+    background:var(--paper);border:1px solid var(--line);border-radius:999px;
+    padding:9px 14px;font-size:13px;font-weight:600;
+  }
+  .photo-picker-btn:hover{border-color:var(--ink);}
+  input[type=file]{display:none;}
+  .filename{font-size:12px;color:var(--ink-soft);}
+
+  .submit-btn{
+    width:100%;padding:14px;border:none;border-radius:999px;
+    background:var(--amber);color:var(--amber-ink);font-weight:700;font-size:15px;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+  }
+  .submit-btn:hover{filter:brightness(1.05);}
+  .submit-btn:disabled{opacity:.6;cursor:not-allowed;}
+
+  .msg{margin-top:14px;padding:12px 14px;border-radius:10px;font-size:13.5px;display:none;}
+  .msg.show{display:block;}
+  .msg.ok{background:#E7F5EC;color:var(--green);border:1px solid #BFE6CC;}
+  .msg.err{background:#FBEAEA;color:#B3261E;border:1px solid #F3C4C1;}
+
+  .spinner{
+    width:16px;height:16px;border-radius:50%;
+    border:2px solid rgba(0,0,0,.2);border-top-color:var(--amber-ink);
+    animation:spin .7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .view{display:none;}
+  .view.active{display:block;}
+
+  footer{text-align:center;padding:26px 20px 40px;color:var(--ink-soft);font-size:12px;}
+
+  @media(max-width:520px){
+    header{padding:12px 16px;}
+    .brand{font-size:17px;}
+    nav button{padding:8px 11px;font-size:12px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="dot"></span>WorkBoard</div>
+  <nav>
+    <button id="navHome" class="active" onclick="showView('home')">Find a worker</button>
+    <button id="navSignup" onclick="showView('signup')">Register as worker</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ===================== HOME VIEW ===================== -->
+  <section id="view-home" class="view active">
+    <div class="hero">
+      <div class="eyebrow">30 trades, one board</div>
+      <h1>Find a trusted worker near you, today.</h1>
+      <p>Pick a trade below to see everyone who has signed up — photo, name and phone number, ready to call.</p>
+      <div class="search">
+        <input type="text" id="catSearch" placeholder="Search a trade, e.g. Electrician" oninput="filterCategories()">
+        <span>⌕</span>
+      </div>
+    </div>
+
+    <div class="board-head">
+      <h2>All trades</h2>
+      <span id="catCount"></span>
+    </div>
+    <div class="grid" id="categoryGrid"></div>
+  </section>
+
+  <!-- ===================== LIST VIEW ===================== -->
+  <section id="view-list" class="view">
+    <button class="backbtn" onclick="showView('home')">← All trades</button>
+    <div class="list-title">
+      <span class="icon" id="listIcon">🔧</span>
+      <h2 id="listTitle">Plumber</h2>
+    </div>
+    <p class="list-sub" id="listSub">Loading workers…</p>
+    <div class="worker-grid" id="workerGrid"></div>
+  </section>
+
+  <!-- ===================== SIGNUP VIEW ===================== -->
+  <section id="view-signup" class="view">
+    <div class="form-wrap">
+      <div class="eyebrow">Worker registration</div>
+      <h2>Get listed on the board</h2>
+      <p class="lead">Add your photo, name and number so customers can call you directly. It takes a minute.</p>
+
+      <form id="signupForm">
+        <div class="field">
+          <label>Your photo</label>
+          <div class="photo-picker">
+            <img id="photoPreview" class="photo-preview" src="" style="display:none;">
+            <div id="photoFallback" class="avatar-fallback" style="width:64px;height:64px;">＋</div>
+            <label class="photo-picker-btn" for="photoInput">Choose from gallery</label>
+            <span class="filename" id="fileName">No photo selected</span>
+          </div>
+          <input type="file" id="photoInput" accept="image/*" onchange="previewPhoto(event)">
+        </div>
+
+        <div class="field">
+          <label>Full name</label>
+          <input type="text" id="nameInput" placeholder="e.g. Ramesh Kumar" required>
+        </div>
+
+        <div class="field">
+          <label>Phone number</label>
+          <input type="tel" id="phoneInput" placeholder="e.g. 9876543210" required>
+        </div>
+
+        <div class="field">
+          <label>Trade / category</label>
+          <select id="categoryInput" required></select>
+        </div>
+
+        <div class="field">
+          <label>Cost (per visit / per day)</label>
+          <input type="text" id="costInput" placeholder="e.g. ₹300 per visit">
+        </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">Sign up</button>
+        <div class="msg" id="formMsg"></div>
+      </form>
+    </div>
+  </section>
+
+</main>
+
+<footer>WorkBoard · built for connecting local workers &amp; customers</footer>
+
+<script>
+/* =========================================================
+   1. SUPABASE CONFIG — replace these two lines with your own
+   Project Settings → API → Project URL / anon public key
+   ========================================================= */
+const SUPABASE_URL = "https://sarrmyiypvxzclyssgab.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_CmPgs6k4SESVZCA3VAgY4A_BDVxOrm2";
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const BUCKET = "worker-photos";
+
+/* =========================================================
+   2. CATEGORIES (30 trades) — icon + label
+   ========================================================= */
+const CATEGORIES = [
+  {icon:"🚿", label:"Plumber"},
+  {icon:"💡", label:"Electrician"},
+  {icon:"🪚", label:"Carpenter"},
+  {icon:"🎨", label:"Painter"},
+  {icon:"🧹", label:"Cleaner"},
+  {icon:"🧱", label:"Mason"},
+  {icon:"❄️", label:"AC Repair"},
+  {icon:"🔌", label:"Appliance Repair"},
+  {icon:"🐜", label:"Pest Control"},
+  {icon:"🌿", label:"Gardener"},
+  {icon:"📦", label:"Mover & Packer"},
+  {icon:"🔑", label:"Locksmith"},
+  {icon:"🔥", label:"Welder"},
+  {icon:"🏠", label:"Roofer"},
+  {icon:"🧩", label:"Tile Setter"},
+  {icon:"🪣", label:"Plasterer"},
+  {icon:"🪟", label:"Glass & Aluminium"},
+  {icon:"📹", label:"CCTV Installer"},
+  {icon:"☀️", label:"Solar Technician"},
+  {icon:"🛋️", label:"Interior Designer"},
+  {icon:"📚", label:"Home Tutor"},
+  {icon:"🍳", label:"Cook / Chef"},
+  {icon:"🚗", label:"Driver"},
+  {icon:"🍼", label:"Babysitter / Nanny"},
+  {icon:"🧑‍⚕️", label:"Elderly Caregiver"},
+  {icon:"🧵", label:"Tailor"},
+  {icon:"💇", label:"Beautician"},
+  {icon:"🎉", label:"Mehendi Artist"},
+  {icon:"📷", label:"Photographer"},
+  {icon:"🎊", label:"Event Decorator"},
+];
+
+let currentCategory = null;
+
+/* =========================================================
+   3. RENDER: category board
+   ========================================================= */
+const categoryGrid = document.getElementById("categoryGrid");
+const catCount = document.getElementById("catCount");
+
+function renderCategories(list){
+  categoryGrid.innerHTML = "";
+  list.forEach((c) => {
+    const num = String(CATEGORIES.indexOf(c) + 1).padStart(2,"0");
+    const el = document.createElement("button");
+    el.className = "ticket";
+    el.onclick = () => openCategory(c);
+    el.innerHTML = `
+      <span class="hole"></span>
+      <span class="ticket-num mono">Bay ${num}</span>
+      <span class="icon">${c.icon}</span>
+      <span class="label">${c.label}</span>
+    `;
+    categoryGrid.appendChild(el);
+  });
+  catCount.textContent = `${list.length} of ${CATEGORIES.length} shown`;
+}
+renderCategories(CATEGORIES);
+
+function filterCategories(){
+  const q = document.getElementById("catSearch").value.toLowerCase();
+  renderCategories(CATEGORIES.filter(c => c.label.toLowerCase().includes(q)));
+}
+
+/* Populate the signup form's category dropdown */
+const categoryInput = document.getElementById("categoryInput");
+CATEGORIES.forEach(c => {
+  const opt = document.createElement("option");
+  opt.value = c.label;
+  opt.textContent = `${c.icon} ${c.label}`;
+  categoryInput.appendChild(opt);
+});
+
+/* =========================================================
+   4. VIEW SWITCHING
+   ========================================================= */
+function showView(name){
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  document.getElementById("view-" + name).classList.add("active");
+  document.getElementById("navHome").classList.toggle("active", name === "home");
+  document.getElementById("navSignup").classList.toggle("active", name === "signup");
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+/* =========================================================
+   5. LIST VIEW — fetch workers for a category
+   ========================================================= */
+const workerGrid = document.getElementById("workerGrid");
+const listTitle = document.getElementById("listTitle");
+const listIcon = document.getElementById("listIcon");
+const listSub = document.getElementById("listSub");
+
+async function openCategory(cat){
+  currentCategory = cat;
+  listTitle.textContent = cat.label;
+  listIcon.textContent = cat.icon;
+  listSub.textContent = "Loading workers…";
+  workerGrid.innerHTML = "";
+  showView("list");
+
+  const { data, error } = await sb
+    .from("workers")
+    .select("*")
+    .eq("category", cat.label)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    listSub.textContent = "Could not load workers.";
+    workerGrid.innerHTML = `<div class="empty">${error.message}<br><small>Check that SUPABASE_URL / SUPABASE_ANON_KEY are set correctly.</small></div>`;
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    listSub.textContent = `No ${cat.label.toLowerCase()}s have signed up yet.`;
+    workerGrid.innerHTML = `<div class="empty">Nobody here yet — be the first <b>${cat.label}</b> on the board.<br><br><button class="call-btn" style="display:inline-flex;padding:10px 18px;" onclick="showView('signup'); document.getElementById('categoryInput').value='${cat.label}'">Sign up as ${cat.label}</button></div>`;
+    return;
+  }
+
+  listSub.textContent = `${data.length} ${cat.label.toLowerCase()}${data.length > 1 ? "s" : ""} available`;
+  data.forEach(w => workerGrid.appendChild(workerCard(w)));
+}
+
+function initials(name){
+  return name.trim().split(/\s+/).slice(0,2).map(w => w[0]?.toUpperCase() || "").join("");
+}
+
+function workerCard(w){
+  const card = document.createElement("div");
+  card.className = "worker-card";
+  const photoHtml = w.photo_url
+    ? `<img class="avatar" src="${w.photo_url}" alt="${w.name}">`
+    : `<div class="avatar-fallback">${initials(w.name)}</div>`;
+
+  card.innerHTML = `
+    <div class="worker-top">
+      ${photoHtml}
+      <div>
+        <div class="worker-name">${w.name}</div>
+        <div class="worker-cat">${w.category}</div>
+      </div>
+    </div>
+    <div class="worker-row">
+      <span>Cost</span>
+      <span class="cost-tag">${w.cost ? w.cost : "Ask directly"}</span>
+    </div>
+    <a class="call-btn" href="tel:${w.phone}">📞 Call ${w.phone}</a>
+  `;
+  return card;
+}
+
+/* =========================================================
+   6. SIGNUP — photo upload + insert row
+   ========================================================= */
+let selectedFile = null;
+
+function previewPhoto(e){
+  const file = e.target.files[0];
+  if (!file) return;
+  selectedFile = file;
+  document.getElementById("fileName").textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = document.getElementById("photoPreview");
+    img.src = ev.target.result;
+    img.style.display = "block";
+    document.getElementById("photoFallback").style.display = "none";
+  };
+  reader.readAsDataURL(file);
+}
+
+const signupForm = document.getElementById("signupForm");
+const formMsg = document.getElementById("formMsg");
+const submitBtn = document.getElementById("submitBtn");
+
+signupForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  formMsg.className = "msg";
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = `<span class="spinner"></span> Signing up…`;
+
+  try {
+    const name = document.getElementById("nameInput").value.trim();
+    const phone = document.getElementById("phoneInput").value.trim();
+    const category = document.getElementById("categoryInput").value;
+    const cost = document.getElementById("costInput").value.trim();
+
+    let photo_url = null;
+
+    if (selectedFile) {
+      const ext = selectedFile.name.split(".").pop();
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error: uploadError } = await sb.storage
+        .from(BUCKET)
+        .upload(path, selectedFile);
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = sb.storage.from(BUCKET).getPublicUrl(path);
+      photo_url = publicUrlData.publicUrl;
+    }
+
+    const { error: insertError } = await sb.from("workers").insert([
+      { name, phone, category, cost, photo_url }
+    ]);
+
+    if (insertError) throw insertError;
+
+    formMsg.textContent = "✅ Signed up! Your profile is now live on the board.";
+    formMsg.className = "msg show ok";
+    signupForm.reset();
+    selectedFile = null;
+    document.getElementById("photoPreview").style.display = "none";
+    document.getElementById("photoFallback").style.display = "flex";
+    document.getElementById("fileName").textContent = "No photo selected";
+
+  } catch (err) {
+    formMsg.textContent = "❌ " + (err.message || "Something went wrong. Please try again.");
+    formMsg.className = "msg show err";
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Sign up";
+  }
+});
+</script>
+</body>
+</html>
